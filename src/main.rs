@@ -168,6 +168,33 @@ async fn main() -> Result<()> {
                 )
         )
         .subcommand(
+            Command::new("transactions")
+                .about("Export transactions for a given account over a date range")
+                .arg(account_arg.clone())
+                .arg(
+                    Arg::new("from")
+                        .long("from")
+                        .short('f')
+                        .help("Start date for transactions (DD/MM/YYYY)")
+                        .required(true)
+                )
+                .arg(
+                    Arg::new("to")
+                        .long("to")
+                        .short('t')
+                        .help("End date for transactions (DD/MM/YYYY)")
+                        .required(true)
+                )
+                .arg(
+                    Arg::new("output")
+                        .long("output")
+                        .short('o')
+                        .help("Output format (csv or json)")
+                        .default_value("csv")
+                        .value_parser(["csv", "json"])
+                )
+        )
+        .subcommand(
             Command::new("transfer")
                 .about("Make a transfer between your accounts")
                 .arg(account_arg.clone())

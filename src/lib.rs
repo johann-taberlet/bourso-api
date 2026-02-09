@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use bourso_api::{
-    account::{Account, AccountKind},
+    account::{Account, AccountKind, Transaction},
     client::{
         trade::{order::OrderSide, tick::QuoteTab},
         transfer::TransferProgress,
@@ -254,6 +254,62 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
 
             info!("Found {} accounts", accounts.len());
             println!("{:#?}", accounts);
+        }
+
+        Some(("transactions", tx_matches)) => {
+            let account_id = tx_matches
+                .get_one::<String>("account")
+                .map(|s| s.as_str())
+                .unwrap();
+            let from_date = tx_matches
+                .get_one::<String>("from")
+                .map(|s| s.as_str())
+                .unwrap();
+            let to_date = tx_matches
+                .get_one::<String>("to")
+                .map(|s| s.as_str())
+                .unwrap();
+            let output = tx_matches
+                .get_one::<String>("output")
+                .map(|s| s.as_str())
+                .unwrap();
+
+            info!(
+                "Fetching transactions for account {} from {} to {}...",
+                account_id, from_date, to_date
+            );
+
+            let transactions: Vec<Transaction> = web_client
+                .get_transactions(account_id, from_date, to_date)
+                .await?;
+
+            info!("Found {} transactions", transactions.len());
+
+            match output {
+                "json" => {
+                    println!("{}", serde_json::to_string_pretty(&transactions)?);
+                }
+                _ => {
+                    // CSV output with semicolon separator
+                    println!("dateOp;dateVal;label;category;categoryParent;supplierFound;amount;comment;accountNum;accountLabel;accountbalance");
+                    for tx in &transactions {
+                        println!(
+                            "{};{};{};{};{};{};{};{};{};{};{}",
+                            tx.date_op,
+                            tx.date_val,
+                            tx.label,
+                            tx.category,
+                            tx.category_parent,
+                            tx.supplier_found,
+                            format!("{:.2}", tx.amount),
+                            tx.comment,
+                            tx.account_num,
+                            tx.account_label,
+                            format!("{:.2}", tx.account_balance),
+                        );
+                    }
+                }
+            }
         }
 
         Some(("trade", trade_matches)) => {
