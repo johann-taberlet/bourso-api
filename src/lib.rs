@@ -117,7 +117,7 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
         }
         // These matches require authentication
         Some(("accounts", _))
-        | Some(("transactions", _))
+        | Some(("export", _))
         | Some(("balance", _))
         | Some(("trade", _))
         | Some(("transfer", _)) => (),
@@ -256,59 +256,77 @@ pub async fn parse_matches(matches: ArgMatches) -> Result<()> {
             println!("{:#?}", accounts);
         }
 
-        Some(("transactions", tx_matches)) => {
-            let account_id = tx_matches
-                .get_one::<String>("account")
-                .map(|s| s.as_str())
-                .unwrap();
-            let from_date = tx_matches
-                .get_one::<String>("from")
-                .map(|s| s.as_str())
-                .unwrap();
-            let to_date = tx_matches
-                .get_one::<String>("to")
-                .map(|s| s.as_str())
-                .unwrap();
-            let output = tx_matches
-                .get_one::<String>("output")
-                .map(|s| s.as_str())
-                .unwrap();
+        Some(("export", export_matches)) => {
+            match export_matches.subcommand() {
+                Some(("transactions", tx_matches)) => {
+                    let account_id = tx_matches
+                        .get_one::<String>("account")
+                        .map(|s| s.as_str())
+                        .unwrap();
+                    let start_date = tx_matches
+                        .get_one::<String>("start-date")
+                        .map(|s| s.as_str())
+                        .unwrap();
+                    let end_date = tx_matches
+                        .get_one::<String>("end-date")
+                        .map(|s| s.as_str())
+                        .unwrap();
+                    let format = tx_matches
+                        .get_one::<String>("format")
+                        .map(|s| s.as_str())
+                        .unwrap();
+                    let output_path = tx_matches
+                        .get_one::<String>("output")
+                        .map(|s| s.as_str());
 
-            info!(
-                "Fetching transactions for account {} from {} to {}...",
-                account_id, from_date, to_date
-            );
+                    info!(
+                        "Fetching transactions for account {} from {} to {}...",
+                        account_id, start_date, end_date
+                    );
 
-            let transactions: Vec<Transaction> = web_client
-                .get_transactions(account_id, from_date, to_date)
-                .await?;
+                    let transactions: Vec<Transaction> = web_client
+                        .get_transactions(account_id, start_date, end_date)
+                        .await?;
 
-            info!("Found {} transactions", transactions.len());
+                    info!("Found {} transactions", transactions.len());
 
-            match output {
-                "json" => {
-                    println!("{}", serde_json::to_string_pretty(&transactions)?);
-                }
-                _ => {
-                    // CSV output with semicolon separator
-                    println!("dateOp;dateVal;label;category;categoryParent;supplierFound;amount;comment;accountNum;accountLabel;accountbalance");
-                    for tx in &transactions {
-                        println!(
-                            "{};{};{};{};{};{};{};{};{};{};{}",
-                            tx.date_op,
-                            tx.date_val,
-                            tx.label,
-                            tx.category,
-                            tx.category_parent,
-                            tx.supplier_found,
-                            format!("{:.2}", tx.amount),
-                            tx.comment,
-                            tx.account_num,
-                            tx.account_label,
-                            format!("{:.2}", tx.account_balance),
-                        );
+                    let content = match format {
+                        "json" => serde_json::to_string_pretty(&transactions)?,
+                        _ => {
+                            let mut lines = vec![
+                                "dateOp;dateVal;label;category;categoryParent;supplierFound;amount;comment;accountNum;accountLabel;accountbalance".to_string()
+                            ];
+                            for tx in &transactions {
+                                lines.push(format!(
+                                    "{};{};{};{};{};{};{};{};{};{};{}",
+                                    tx.date_op,
+                                    tx.date_val,
+                                    tx.label,
+                                    tx.category,
+                                    tx.category_parent,
+                                    tx.supplier_found,
+                                    format!("{:.2}", tx.amount),
+                                    tx.comment,
+                                    tx.account_num,
+                                    tx.account_label,
+                                    format!("{:.2}", tx.account_balance),
+                                ));
+                            }
+                            lines.join("\n")
+                        }
+                    };
+
+                    match output_path {
+                        Some(path) => {
+                            std::fs::write(path, &content)?;
+                            info!("Transactions exported to {}", path);
+                        }
+                        None => {
+                            println!("{}", content);
+                        }
                     }
                 }
+                _ => unreachable!(),
             }
         }
 
